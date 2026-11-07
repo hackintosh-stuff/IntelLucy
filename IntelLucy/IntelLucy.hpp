@@ -149,6 +149,16 @@ enum {
     kRxBufferPktSize4K = 4096,
 };
 
+/*
+ * How long start() waits for iommu-parent at most. The property can be
+ * published just after the PCI device appears, and the DMA path is fixed while
+ * the rings are allocated.
+ */
+enum {
+    kMapperPollAttempts = 40,
+    kMapperPollDelayMs  = 5,
+};
+
 #define kMaxMtu 9216
 #define kMaxPacketSize (kMaxMtu + ETH_HLEN + ETH_FCS_LEN)
 

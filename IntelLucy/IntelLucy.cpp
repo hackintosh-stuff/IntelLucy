@@ -250,7 +250,18 @@ bool IntelLucy::start(IOService *provider)
         IOLog("Failed to open provider.\n");
         goto error_open;
     }
-    mapper = IOMapper::copyMapperForDevice(pciDevice);
+    /*
+     * iommu-parent may be published just after the PCI device appears, and
+     * every resource below is allocated for the DMA path this mapper selects,
+     * so give the publisher a moment before falling back to physical DMA.
+     * enable() takes the decision once more for the case where it really is
+     * late; see the switch there.
+     */
+    for (UInt32 attempt = 0; attempt < kMapperPollAttempts && !mapper; attempt++) {
+        mapper = IOMapper::copyMapperForDevice(pciDevice);
+        if (!mapper)
+            IOSleep(kMapperPollDelayMs);
+    }
 
     /* Read config parameters from Info.plist. */
     getParams();
