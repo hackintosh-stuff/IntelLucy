@@ -1,0 +1,3 @@
+# tools/build-noxcode.sh output (one directory per build) and its pointer file
+build-noxcode.*/
+latest-noxcode-build.txt
