@@ -502,6 +502,12 @@ IOReturn IntelLucy::enable(IONetworkInterface *netif)
         }
     }
 
+    /* A failed rebuild above leaves no source to enable. */
+    if (!interruptSource) {
+        IOLog("No interrupt source to enable.\n");
+        goto error_enable;
+    }
+
     /* As we are using an msi the interrupt hasn't been enabled by start(). */
     interruptSource->enable();
     
