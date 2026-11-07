@@ -523,8 +523,18 @@ bool IntelLucy::setupDMADescriptors()
     UInt64 offset = 0;
     UInt32 numSegs = 1;
     bool result = false;
+    IOMapper *dmaMapper;
     
     ixgbeSetNumQueues(&adapterData);
+
+    /*
+     * A DMA command created with a mapper maps its buffer as soon as the
+     * descriptor is attached, and the first mapping activates the domain. The
+     * descriptor rings therefore have to follow the flag that gates the packet
+     * paths, not the mere presence of a mapper: otherwise the rings would turn
+     * translation on and every packet address would still be physical.
+     */
+    dmaMapper = useIOMapper ? mapper : NULL;
 
     /* Create transmitter descriptor array. */
     txBufDesc = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task, (kIODirectionInOut | kIOMemoryPhysicallyContiguous | kIOMemoryHostPhysicallyContiguous | kIOMapInhibitCache), kTxDescMemSize, 0xFFFFFFFFFFFFF000ULL);
@@ -540,7 +550,7 @@ bool IntelLucy::setupDMADescriptors()
     txRing[0].txDescArray = (union ixgbe_adv_tx_desc *)txBufDesc->getBytesNoCopy();
     
     /* I don't know if it's really necessary but the documenation says so and Apple's drivers are also doing it this way. */
-    txDescDmaCmd = IODMACommand::withSpecification(kIODMACommandOutputHost64, 64, 0, IODMACommand::kMapped, 0, 1, mapper, NULL);
+    txDescDmaCmd = IODMACommand::withSpecification(kIODMACommandOutputHost64, 64, 0, IODMACommand::kMapped, 0, 1, dmaMapper, NULL);
     
     if (!txDescDmaCmd) {
         IOLog("Couldn't alloc txDescDmaCmd.\n");
@@ -593,7 +603,7 @@ bool IntelLucy::setupDMADescriptors()
     rxRing[0].rxDescArray = (union ixgbe_adv_rx_desc *)rxBufDesc->getBytesNoCopy();
     
     /* I don't know if it's really necessary but the documenation says so and Apple's drivers are also doing it this way. */
-    rxDescDmaCmd = IODMACommand::withSpecification(kIODMACommandOutputHost64, 64, 0, IODMACommand::kMapped, 0, 1, mapper, NULL);
+    rxDescDmaCmd = IODMACommand::withSpecification(kIODMACommandOutputHost64, 64, 0, IODMACommand::kMapped, 0, 1, dmaMapper, NULL);
     
     if (!rxDescDmaCmd) {
         IOLog("Couldn't alloc rxDescDmaCmd.\n");
