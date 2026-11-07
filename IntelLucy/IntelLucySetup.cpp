@@ -429,7 +429,6 @@ void IntelLucy::medium2Advertise(const IONetworkMedium *medium, UInt32 *adv, UIn
 
 bool IntelLucy::initEventSources(IOService *provider)
 {
-    int msiIndex = -1;
     int intrIndex = 0;
     int intrType = 0;
     bool result = false;
@@ -449,16 +448,10 @@ bool IntelLucy::initEventSources(IOService *provider)
         }
         intrIndex++;
     }
-    if (msiIndex != -1) {
+    if (msiIndex != -1)
         DebugLog("MSI interrupt index: %d\n", msiIndex);
         
-        if (useIOMapper) {
-            interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventSource::Action, this, &IntelLucy::interruptOccurredVTD), provider, msiIndex);
-        } else {
-            interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventSource::Action, this, &IntelLucy::interruptOccurred), provider, msiIndex);
-        }
-    }
-    if (!interruptSource) {
+    if (!createInterruptSource(provider)) {
         IOLog("MSI interrupt could not be enabled.\n");
         goto error_intr;
     }
@@ -486,6 +479,42 @@ error_intr:
     txQueue->release();
     txQueue = NULL;
     goto done;
+}
+
+/*
+ * Create the interrupt source for the DMA path useIOMapper selects; the two
+ * paths use different receive actions, so the source cannot be shared.
+ * msiIndex has to be resolved by initEventSources() first.
+ */
+bool IntelLucy::createInterruptSource(IOService *provider)
+{
+    if (msiIndex == -1)
+        return false;
+
+    if (useIOMapper) {
+        interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventSource::Action, this, &IntelLucy::interruptOccurredVTD), provider, msiIndex);
+    } else {
+        interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventSource::Action, this, &IntelLucy::interruptOccurred), provider, msiIndex);
+    }
+    return (interruptSource != NULL);
+}
+
+/*
+ * Re-create the interrupt source after the DMA path changed. enable() calls
+ * this before the rings are armed, so the old source is not enabled here.
+ */
+bool IntelLucy::replaceInterruptSource(IOService *provider)
+{
+    if (interruptSource) {
+        workLoop->removeEventSource(interruptSource);
+        RELEASE(interruptSource);
+        interruptSource = NULL;
+    }
+    if (!createInterruptSource(provider))
+        return false;
+
+    workLoop->addEventSource(interruptSource);
+    return true;
 }
 
 bool IntelLucy::setupDMADescriptors()

@@ -110,6 +110,7 @@ bool IntelLucy::init(OSDictionary *properties)
             
         txQueue = NULL;
         interruptSource = NULL;
+        msiIndex = -1;
         timerSource = NULL;
         netif = NULL;
         netStats = NULL;
@@ -451,6 +452,50 @@ IOReturn IntelLucy::enable(IONetworkInterface *netif)
     if (!pciDevice->open(this)) {
         IOLog("Failed to open PCI device.\n");
         goto done;
+    }
+
+    /*
+     * The mapper may have been published after start() gave up waiting. The
+     * descriptor rings, the receive maps and the interrupt handler were all
+     * built for the physical path then, so they have to be rebuilt before the
+     * rings are armed below. freeDMADescriptors() only tears down what
+     * start() allocated, which is safe here because the interface is not
+     * enabled yet.
+     */
+    if (!useIOMapper) {
+        if (!mapper)
+            mapper = IOMapper::copyMapperForDevice(pciDevice);
+
+        if (mapper && (version_major >= Tahoe)) {
+            UInt32 savedSize = rxBufferPktSize;
+
+            freeDMADescriptors();
+            useIOMapper = true;
+            rxBufferPktSize = kRxBufferPktSize4K;
+
+            if (setupDMADescriptors()) {
+                setProperty("iommu-mapper", "present");
+                IOLog("IOMapper appeared late, using mapped DMA.\n");
+            } else {
+                IOLog("Couldn't rebuild the DMA resources for mapped DMA; keeping physical DMA.\n");
+
+                freeDMADescriptors();
+                useIOMapper = false;
+                rxBufferPktSize = savedSize;
+
+                if (!setupDMADescriptors()) {
+                    IOLog("Couldn't rebuild the DMA resources for physical DMA.\n");
+                    goto error_enable;
+                }
+            }
+            /*
+             * The two paths use different receive actions.
+             */
+            if (!replaceInterruptSource(pciDevice)) {
+                IOLog("Couldn't recreate the interrupt source.\n");
+                goto error_enable;
+            }
+        }
     }
 
     /* As we are using an msi the interrupt hasn't been enabled by start(). */

@@ -499,6 +499,8 @@ private:
     void updateSelectedMedium();
     void medium2Advertise(const IONetworkMedium *medium, UInt32 *adv, UInt32 *fc);
     bool initEventSources(IOService *provider);
+    bool createInterruptSource(IOService *provider);
+    bool replaceInterruptSource(IOService *provider);
     bool setupDMADescriptors();
     void freeDMADescriptors();
     bool allocTxBufferInfo();
@@ -636,6 +638,8 @@ private:
     IOBasicOutputQueue *txQueue;
     
     IOInterruptEventSource *interruptSource;
+    /* MSI vector the interrupt source is bound to, -1 until it is resolved. */
+    int msiIndex;
     IOTimerEventSource *timerSource;
     IOEthernetInterface *netif;
     IOMemoryMap *baseMap;
