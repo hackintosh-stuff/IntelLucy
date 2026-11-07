@@ -467,7 +467,7 @@ void IntelLucy::ixgbeClearRxRings(struct ixgbe_adapter *adapter)
         ring->rxCleanedCount = ring->rxNextDescIndex = 0;
         ring->rxMapNextIndex = 0;
 
-        if (useAppleVTD) {
+        if (useIOMapper) {
             thread_call_cancel(callEntry);
             IOSleep(1);
             rxMapBuffers(ring, 0, kNumRxMemDesc, false);
@@ -769,7 +769,7 @@ void IntelLucy::ixgbeClearTxRings(struct ixgbe_adapter *adapter)
                 ring->txBufArray[i].packetBytes = 0;
             }
         }
-        if (useAppleVTD) {
+        if (useIOMapper) {
             for (i = 0; i < kNumTxMemDesc; i++) {
                 md = mapInfo->txMemIO[i];
                 

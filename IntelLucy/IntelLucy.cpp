@@ -159,7 +159,7 @@ bool IntelLucy::init(OSDictionary *properties)
         pciPMCtrlOffset = 0;
         enableRSC = false;
         allowUnsupportedSFP = false;
-        useAppleVTD = false;
+        useIOMapper = false;
         nanoseconds_to_absolutetime(kTimeout2Gns - 1, &sfpPollTime);
         nanoseconds_to_absolutetime(kTimeout4Gns, &timeoutCheck);
         nanoseconds_to_absolutetime(kTimeout2Gns, &hangTimeout);
@@ -671,7 +671,7 @@ IOReturn IntelLucy::outputStart(IONetworkInterface *interface, IOOptionBits opti
             vlanMacipLens |= ((vlanTag << IXGBE_TX_FLAGS_VLAN_SHIFT) & IXGBE_TX_FLAGS_VLAN_MASK);
         }
         /* Finally get the physical segments. */
-        if (useAppleVTD)
+        if (useIOMapper)
             numSegs = txMapPacket(m, txSegments, kMaxSegs, &txRing[0]);
         else
             numSegs = txMbufCursor->getPhysicalSegmentsWithCoalesce(m, txSegments, kMaxSegs);
@@ -1207,7 +1207,7 @@ void IntelLucy::txCleanRing(struct ixgbeTxRing *ring)
             if (!(descStatus & IXGBE_TXD_STAT_DD))
                 goto done;
             
-            if (useAppleVTD)
+            if (useIOMapper)
                 txUnmapPacket(ring);
             
             /* First free the attached mbuf and clean up the buffer info. */
@@ -1551,7 +1551,7 @@ void IntelLucy::pollInputPackets(IONetworkInterface *interface, uint32_t maxCoun
     //DebugLog("pollInputPackets() ===>\n");
     if (test_bit(__POLL_MODE, &stateFlags) &&
         !test_and_set_bit(__POLLING, &stateFlags)) {
-        if (useAppleVTD)
+        if (useIOMapper)
             rxCleanRingVTD(interface, &rxRing[0], maxCount, pollQueue, context);
         else
             rxCleanRing(interface, &rxRing[0], maxCount, pollQueue, context);

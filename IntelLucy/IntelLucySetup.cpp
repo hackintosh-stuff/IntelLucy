@@ -70,7 +70,6 @@ static const char *offName = "disabled";
 void IntelLucy::getParams()
 {
     OSDictionary *params;
-    OSIterator *iterator;
     OSString *versionString;
     OSBoolean *tsoV4;
     OSBoolean *tsoV6;
@@ -81,24 +80,22 @@ void IntelLucy::getParams()
     UInt32 interval;
     bool use4kRxBuf;
     
-    if (version_major >= Tahoe) {
-        params = serviceMatching("AppleVTD");
-        
-        if (params) {
-            iterator = IOService::getMatchingServices(params);
-            
-            if (iterator) {
-                IOMapper *mp = OSDynamicCast(IOMapper, iterator->getNextObject());
-                
-                if (mp) {
-                    IOLog("AppleVTD is enabled.");
-                    useAppleVTD = true;
-                }
-                iterator->release();
-            }
-            params->release();
-        }
-    }
+    /*
+     * Mapped DMA is used exactly when the platform published an IOMapper for
+     * this device, and where that mapper comes from is irrelevant: AppleVTD
+     * provides one on Intel, AMDMapperProbe provides one on AMD. This is the
+     * same property lookup IODMACommand and IOMemoryDescriptor perform
+     * internally, so the flag and the mapper they are handed cannot disagree.
+     *
+     * Everything below depends on this decision (receive buffer size, tx/rx
+     * maps, interrupt handler) and start() allocates all of it, which is why
+     * the mapper is resolved before this call rather than here.
+     */
+    useIOMapper = (version_major >= Tahoe) && (mapper != NULL);
+    setProperty("iommu-mapper", (mapper != NULL) ? "present" : "absent");
+    if (mapper)
+        IOLog("IOMapper available, using mapped DMA.\n");
+
     versionString = OSDynamicCast(OSString, getProperty(kDriverVersionName));
 
     params = OSDynamicCast(OSDictionary, getProperty(kParamName));
@@ -128,7 +125,7 @@ void IntelLucy::getParams()
         
         if (buf4k != NULL) {
             use4kRxBuf = buf4k->getValue();
-            rxBufferPktSize = (use4kRxBuf || enableRSC || useAppleVTD) ?
+            rxBufferPktSize = (use4kRxBuf || enableRSC || useIOMapper) ?
                 kRxBufferPktSize4K : kRxBufferPktSize2K;
         } else {
             use4kRxBuf = true;
@@ -455,7 +452,7 @@ bool IntelLucy::initEventSources(IOService *provider)
     if (msiIndex != -1) {
         DebugLog("MSI interrupt index: %d\n", msiIndex);
         
-        if (useAppleVTD) {
+        if (useIOMapper) {
             interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventSource::Action, this, &IntelLucy::interruptOccurredVTD), provider, msiIndex);
         } else {
             interruptSource = IOInterruptEventSource::interruptEventSource(this, OSMemberFunctionCast(IOInterruptEventSource::Action, this, &IntelLucy::interruptOccurred), provider, msiIndex);
@@ -661,7 +658,7 @@ bool IntelLucy::allocTxBufferInfo()
             txRing[i].txBufArray[j].packetBytes = 0;
         }
     }
-    if (useAppleVTD) {
+    if (useIOMapper) {
         txMapMem = IOMallocZero(kTxMapMemSize);
         
         if (!txMapMem) {
@@ -763,7 +760,7 @@ bool IntelLucy::allocRxPool()
                 goto error_rx_pool;
             }
             
-            if (!useAppleVTD) {
+            if (!useIOMapper) {
                 pa = mbuf_data_to_physical(mbuf_datastart(m));
             }
             
@@ -779,7 +776,7 @@ bool IntelLucy::allocRxPool()
             ring->rxDescArray[i].read.hdr_addr = 0;
         }
     }
-    if (useAppleVTD)
+    if (useIOMapper)
         result = setupRxMap();
     else
         result = true;
@@ -986,7 +983,7 @@ void IntelLucy::freeDMADescriptors()
     }
     freeTxBufferInfo();
 
-    if (useAppleVTD)
+    if (useIOMapper)
         freeRxMap();
     
     if (rxBufArrayMem) {

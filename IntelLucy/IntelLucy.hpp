@@ -715,7 +715,12 @@ private:
     bool enableASPM;
     bool enableRSC;
     bool allowUnsupportedSFP;
-    bool useAppleVTD;
+    /*
+     * True when all DMA addresses have to go through the IOMapper published for
+     * this PCI device. Where that mapper comes from does not matter: AppleVTD
+     * provides one on Intel, AMDMapperProbe provides one on AMD.
+     */
+    bool useIOMapper;
 };
 
 /*
