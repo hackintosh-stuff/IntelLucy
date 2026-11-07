@@ -217,6 +217,10 @@ void IntelLucy::free()
     RELEASE(pciDevice);
     freeDMADescriptors();
 
+    /* start() (or the late switch in enable()) took a reference on the mapper. */
+    RELEASE(mapper);
+    mapper = NULL;
+
     ReleaseMcAddrList();
     
     DebugLog("free() <===\n");

@@ -123,13 +123,19 @@ void IntelLucy::getParams()
 
         buf4k = OSDynamicCast(OSBoolean, params->getObject(kRxBufferSize4kName));
         
-        if (buf4k != NULL) {
+        if (buf4k != NULL)
             use4kRxBuf = buf4k->getValue();
-            rxBufferPktSize = (use4kRxBuf || enableRSC || useIOMapper) ?
-                kRxBufferPktSize4K : kRxBufferPktSize2K;
-        } else {
+        else
             use4kRxBuf = true;
-        }
+        /*
+         * The mapped path maps one whole page per receive buffer, and RSC needs
+         * room for the coalesced frame, so both force 4 KB buffers regardless
+         * of the preference above. This has to be evaluated even when the key
+         * is absent, or the size would silently stay at its 2 KB default.
+         */
+        rxBufferPktSize = (use4kRxBuf || enableRSC || useIOMapper) ?
+            kRxBufferPktSize4K : kRxBufferPktSize2K;
+
         IOLog("4KB receive buffers %s.\n", use4kRxBuf ? onName : offName);
 
         tv = OSDynamicCast(OSNumber, params->getObject(kPollTime10GName));
